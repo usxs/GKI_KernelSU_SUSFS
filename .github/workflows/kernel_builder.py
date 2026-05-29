@@ -194,6 +194,11 @@ CONFIG_ZRAM_WRITEBACK=y
         """运行命令"""
         return self.shell.run(cmd, **kwargs)
     
+    def _chdir(self, path: Path) -> None:
+        """切换目录并更新 shell cwd"""
+        os.chdir(path)
+        self.shell.cwd = str(path)
+    
     def _apply_susfs_commit(self) -> None:
         """应用 SUSFS commit (支持 hash 或相对偏移如 HEAD~1)"""
         if not self.config.susfs_commit:
@@ -205,7 +210,7 @@ CONFIG_ZRAM_WRITEBACK=y
         
         logger.info(f"应用 SUSFS commit: {self.config.susfs_commit}")
         
-        os.chdir(self.susfs_dir)
+        self._chdir(self.susfs_dir)
         
         # 检查是否为相对偏移 (如 HEAD~1, HEAD~3)
         if self.config.susfs_commit.startswith("HEAD~"):
@@ -225,7 +230,7 @@ CONFIG_ZRAM_WRITEBACK=y
             self._run_cmd(f"git fetch origin", check=False)
             self._run_cmd(f"git checkout {self.config.susfs_commit}", check=False)
         
-        os.chdir(self.workspace)
+        self._chdir(self.workspace)
     
     def clone_repositories(self) -> None:
         """克隆所有必需的仓库"""
@@ -329,7 +334,9 @@ CONFIG_ZRAM_WRITEBACK=y
         """初始化和同步内核源代码"""
         logger.info("=== 初始化和同步内核源代码 ===")
         
-        os.chdir(self.work_dir)
+        # 设置工作目录
+        self._chdir(self.work_dir)
+        self.shell.cwd = str(self.work_dir)
         
         formatted_branch = self.config.formatted_branch
         
@@ -392,7 +399,7 @@ CONFIG_ZRAM_WRITEBACK=y
         if is_deprecated and av == "android13" and kv == "5.15" and sub_level and sub_level < 123:
             logger.info("修复 5.15 仅支持旧版 C 库的 BUG")
             common_dir = self.work_dir / "common"
-            os.chdir(common_dir)
+            self._chdir(common_dir)
             
             patch_url = LEGACY_FIXES['android13-5.15-below-123']['url']
             self._run_cmd(
@@ -400,13 +407,13 @@ CONFIG_ZRAM_WRITEBACK=y
                 check=False
             )
             
-            os.chdir(self.work_dir)
+            self._chdir(self.work_dir)
         
         # android12-5.10 below 136 需要 fdinfo 修复
         if av == "android12" and kv == "5.10" and sub_level and sub_level < 136:
             logger.info("应用 android12-5.10 fdinfo 修复补丁...")
             common_dir = self.work_dir / "common"
-            os.chdir(common_dir)
+            self._chdir(common_dir)
             
             patch_url = LEGACY_FIXES['android12-5.10-below-136']['url']
             self._run_cmd(
@@ -414,7 +421,7 @@ CONFIG_ZRAM_WRITEBACK=y
                 check=False
             )
             
-            os.chdir(self.work_dir)
+            self._chdir(self.work_dir)
     
     def add_kernel_supatch(self) -> None:
         """添加 OnePlus 8E 支持补丁"""
@@ -428,7 +435,7 @@ CONFIG_ZRAM_WRITEBACK=y
             logger.warning("驱动目录不存在，跳过 OnePlus 8E 支持补丁")
             return
         
-        os.chdir(drivers_dir)
+        self._chdir(drivers_dir)
         
         logger.info("下载 hmbird_patch.c...")
         self._run_cmd(f"curl -LSs {OP8E_PATCH_URL} -o hmbird_patch.c", check=False)
@@ -444,7 +451,7 @@ CONFIG_ZRAM_WRITEBACK=y
         """添加 KernelSU"""
         logger.info("=== 添加 KernelSU ===")
         
-        os.chdir(self.work_dir)
+        self._chdir(self.work_dir)
         
         # 如果指定了 commit hash，先克隆指定版本
         if self.config.kernelsu_commit:
@@ -464,9 +471,9 @@ CONFIG_ZRAM_WRITEBACK=y
         if self.config.kernelsu_commit:
             ksu_dir = self.work_dir / "KernelSU"
             if ksu_dir.exists():
-                os.chdir(ksu_dir)
+                self._chdir(ksu_dir)
                 self._run_cmd(f"git checkout {self.config.kernelsu_commit}", check=False)
-                os.chdir(self.work_dir)
+                self._chdir(self.work_dir)
         
         logger.info("=== KernelSU 添加完成 ===")
     
@@ -481,7 +488,7 @@ CONFIG_ZRAM_WRITEBACK=y
         if not common_dir.exists():
             return
         
-        os.chdir(common_dir)
+        self._chdir(common_dir)
         
         # 下载并运行 setup 脚本
         logger.info("下载并运行 Baseband-guard setup...")
@@ -507,7 +514,7 @@ CONFIG_ZRAM_WRITEBACK=y
         """应用 SUSFS 补丁"""
         logger.info("=== 应用 SUSFS 补丁 ===")
         
-        os.chdir(self.work_dir)
+        self._chdir(self.work_dir)
         common_dir = self.work_dir / "common"
         
         # 复制 SUSFS 补丁
@@ -536,7 +543,7 @@ CONFIG_ZRAM_WRITEBACK=y
         """应用 SukiSU 特定补丁"""
         logger.info("=== 应用 SukiSU 补丁 ===")
         
-        os.chdir(self.work_dir / "common")
+        self._chdir(self.work_dir / "common")
         
         # 复制 hooks 补丁
         hooks_patch = self.sukisu_patch_dir / "69_hide_stuff.patch"
@@ -553,7 +560,7 @@ CONFIG_ZRAM_WRITEBACK=y
         
         logger.info("=== 应用 ZRAM (LZ4KD) 补丁 ===")
         
-        os.chdir(self.work_dir / "common")
+        self._chdir(self.work_dir / "common")
         
         # 复制 LZ4K 源文件
         lz4k_inc = self.sukisu_patch_dir / "other/zram/lz4k/include/linux"
@@ -589,7 +596,7 @@ CONFIG_ZRAM_WRITEBACK=y
         """应用 task_mmu.c 修复"""
         logger.info("=== 应用 task_mmu.c 修复 ===")
         
-        os.chdir(self.work_dir / "common")
+        self._chdir(self.work_dir / "common")
         
         task_mmu_file = Path("fs/proc/task_mmu.c")
         if not task_mmu_file.exists():
@@ -664,7 +671,7 @@ CONFIG_ZRAM_WRITEBACK=y
         """配置内核"""
         logger.info("=== 配置内核 ===")
         
-        os.chdir(self.work_dir)
+        self._chdir(self.work_dir)
         config_file = self.work_dir / "common/arch/arm64/configs/gki_defconfig"
         
         if not config_file.exists():
@@ -752,7 +759,7 @@ CONFIG_ZRAM_WRITEBACK=y
         """配置内核名称"""
         logger.info("=== 配置内核名称 ===")
         
-        os.chdir(self.work_dir)
+        self._chdir(self.work_dir)
         
         # 配置版本号
         setlocalversion = self.work_dir / "common/scripts/setlocalversion"
@@ -829,7 +836,7 @@ CONFIG_ZRAM_WRITEBACK=y
         """编译内核"""
         logger.info("=== 开始编译内核 ===")
         
-        os.chdir(self.work_dir)
+        self._chdir(self.work_dir)
         
         # 修改 build.config
         build_config_aarch64 = self.work_dir / "common/build.config.gki.aarch64"
@@ -888,7 +895,7 @@ CONFIG_ZRAM_WRITEBACK=y
         
         logger.info("=== 修补 Image 文件 (KPM) ===")
         
-        os.chdir(self.work_dir)
+        self._chdir(self.work_dir)
         
         # 根据 Android 版本确定路径
         if self.config.android_version in ["android12", "android13"]:
@@ -900,7 +907,7 @@ CONFIG_ZRAM_WRITEBACK=y
             logger.warning(f"Image 目录不存在: {image_dir}")
             return
         
-        os.chdir(image_dir)
+        self._chdir(image_dir)
         
         # 下载并应用补丁
         logger.info("下载 KPM patch 脚本...")
@@ -918,7 +925,7 @@ CONFIG_ZRAM_WRITEBACK=y
         """准备启动镜像"""
         logger.info("=== 准备启动镜像 ===")
         
-        os.chdir(self.work_dir)
+        self._chdir(self.work_dir)
         
         bootimgs_dir = self.work_dir / "bootimgs"
         bootimgs_dir.mkdir(exist_ok=True)
@@ -953,7 +960,7 @@ CONFIG_ZRAM_WRITEBACK=y
     
     def _prepare_android12_boot_images(self, bootimgs_dir: Path, artifacts: list) -> None:
         """准备 Android 12 启动镜像"""
-        os.chdir(bootimgs_dir)
+        self._chdir(bootimgs_dir)
         
         # 下载 GKI 内核
         gki_url = (
@@ -989,12 +996,12 @@ CONFIG_ZRAM_WRITEBACK=y
     
     def _prepare_boot_images_generic(self, bootimgs_dir: Path, artifacts: list) -> None:
         """准备通用启动镜像"""
-        os.chdir(bootimgs_dir)
+        self._chdir(bootimgs_dir)
         self._create_boot_image_variants(bootimgs_dir, artifacts, has_ramdisk=False)
     
     def _create_boot_image_variants(self, bootimgs_dir: Path, artifacts: list, has_ramdisk: bool = False) -> None:
         """创建各种格式的 boot.img"""
-        os.chdir(bootimgs_dir)
+        self._chdir(bootimgs_dir)
         
         # 创建 Image.gz
         if (bootimgs_dir / "Image").exists():
@@ -1038,7 +1045,7 @@ CONFIG_ZRAM_WRITEBACK=y
         """创建 AnyKernel3 ZIP 文件"""
         logger.info("=== 创建 AnyKernel3 ZIP 文件 ===")
         
-        os.chdir(self.work_dir)
+        self._chdir(self.work_dir)
         
         artifacts = []
         ak3_dir = self.anykernel_dir
@@ -1060,14 +1067,14 @@ CONFIG_ZRAM_WRITEBACK=y
             self._run_cmd(f"cp {image_path} {ak3_dir}/", check=False)
             
             # 创建 ZIP
-            os.chdir(ak3_dir)
+            self._chdir(ak3_dir)
             self._run_cmd(f"zip -r ../{zip_name} ./*", check=False)
             
             # 清理
             self._run_cmd(f"rm {ak3_dir}/{image_file}", check=False)
             
             artifacts.append(str(self.work_dir / zip_name))
-            os.chdir(self.work_dir)
+            self._chdir(self.work_dir)
         
         logger.info("=== AnyKernel3 ZIP 创建完成 ===")
         return artifacts

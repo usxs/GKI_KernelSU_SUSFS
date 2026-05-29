@@ -513,30 +513,32 @@ CONFIG_ZRAM_WRITEBACK=y
     def apply_susfs_patches(self) -> None:
         """应用 SUSFS 补丁"""
         logger.info("=== 应用 SUSFS 补丁 ===")
-        
+
         self._chdir(self.work_dir)
         common_dir = self.work_dir / "common"
-        
+
         # 复制 SUSFS 补丁
         susfs_patch = self.susfs_dir / "kernel_patches" / self.config.get_susfs_patch_filename()
         if susfs_patch.exists():
             self._run_cmd(f"cp {susfs_patch} {common_dir}/", check=False)
-        
+
         # 复制 SUSFS 源文件
         fs_dir = self.susfs_dir / "kernel_patches/fs"
         if fs_dir.exists():
             self._run_cmd(f"cp -r {fs_dir}/* {common_dir}/fs/", check=False)
-        
+
         include_dir = self.susfs_dir / "kernel_patches/include/linux"
         if include_dir.exists():
             self._run_cmd(f"cp -r {include_dir}/* {common_dir}/include/linux/", check=False)
-        
+
         # 应用主补丁
         if susfs_patch.exists():
             patch_file = common_dir / self.config.get_susfs_patch_filename()
             if patch_file.exists():
+                self._chdir(common_dir)
                 self._run_cmd(f"patch -p1 --fuzz=3 < {patch_file}", check=False)
-        
+                self._chdir(self.work_dir)
+
         logger.info("=== SUSFS 补丁应用完成 ===")
     
     def apply_sukisu_patches(self) -> None:

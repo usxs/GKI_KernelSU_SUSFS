@@ -609,8 +609,6 @@ CONFIG_ZRAM_WRITEBACK=y
         kv = self.config.kernel_version
         formatted_branch = f"{av}-{kv}"
 
-        fake_patched = False
-
         # android15-6.6 修复
         if formatted_branch == "android15-6.6":
             with open(task_mmu_file, "r") as f:
@@ -619,27 +617,38 @@ CONFIG_ZRAM_WRITEBACK=y
             # 检查是否需要添加 nr_subpages
             if "unsigned int nr_subpages = __PAGE_SIZE / PAGE_SIZE;" not in content:
                 logger.info("未找到 nr_subpages，正在进行补丁修复")
-                subprocess.run(
-                    r"sed -i -e '/int ret = 0, copied = 0;/a \\tunsigned int nr_subpages = __PAGE_SIZE / PAGE_SIZE;' "
-                    r"-e '/int ret = 0, copied = 0;/a \\tpagemap_entry_t *res = NULL;' fs/proc/task_mmu.c",
-                    shell=True, check=False
-                )
-                fake_patched = True
+
+                # 使用 Python 直接修改文件
+                lines = content.split('\n')
+                new_lines = []
+                inserted = False
+                for line in lines:
+                    new_lines.append(line)
+                    # 在 "int ret = 0, copied = 0;" 之后添加两行
+                    if not inserted and "int ret = 0, copied = 0;" in line:
+                        new_lines.append('\tunsigned int nr_subpages = __PAGE_SIZE / PAGE_SIZE;')
+                        new_lines.append('\tpagemap_entry_t *res = NULL;')
+                        inserted = True
+
+                if inserted:
+                    with open(task_mmu_file, "w") as f:
+                        f.write('\n'.join(new_lines))
+
+                    # 立即撤销修改（fake patch）
+                    logger.info("撤销 task_mmu.c 的修改（fake patch）")
+                    with open(task_mmu_file, "r") as f:
+                        content = f.read()
+                    lines = content.split('\n')
+                    new_lines = []
+                    for line in lines:
+                        if '\tunsigned int nr_subpages = __PAGE_SIZE / PAGE_SIZE;' not in line and \
+                           '\tpagemap_entry_t *res = NULL;' not in line:
+                            new_lines.append(line)
+                    with open(task_mmu_file, "w") as f:
+                        f.write('\n'.join(new_lines))
 
             # 修复 base.c 头文件
             self._fix_base_c_header()
-
-            # 如果 fake_patched=1，撤销刚才的修改
-            if fake_patched:
-                with open(task_mmu_file, "r") as f:
-                    content = f.read()
-                if "unsigned int nr_subpages = __PAGE_SIZE / PAGE_SIZE;" in content:
-                    logger.info("撤销 task_mmu.c 的修改")
-                    subprocess.run(
-                        r"sed -i -e '/unsigned int nr_subpages = __PAGE_SIZE \/ PAGE_SIZE;/d' "
-                        r"-e '/pagemap_entry_t \*res = NULL;/d' fs/proc/task_mmu.c",
-                        shell=True, check=False
-                    )
 
         # android14-6.1 修复
         elif formatted_branch == "android14-6.1":
@@ -649,19 +658,16 @@ CONFIG_ZRAM_WRITEBACK=y
             # 检查 vma_pages 是否存在
             if "if (!vma_pages(vma))" not in content:
                 logger.info("未找到 vma_pages，正在进行补丁修复")
-                fake_patched = True
 
-            # 修复 base.c 头文件
-            self._fix_base_c_header()
+                # 修复 base.c 头文件
+                self._fix_base_c_header()
 
-            # 如果 fake_patched=1，执行修复
-            if fake_patched:
+                # 执行修复
                 if "goto show_pad;" in content:
                     logger.info("执行 task_mmu.c 修复")
-                    subprocess.run(
-                        r"sed -i -e 's/goto show_pad;/return 0;/' fs/proc/task_mmu.c",
-                        shell=True, check=False
-                    )
+                    content = content.replace("goto show_pad;", "return 0;")
+                    with open(task_mmu_file, "w") as f:
+                        f.write(content)
 
         # android12-5.10, android13-5.10, android13-5.15 修复
         elif formatted_branch in ["android12-5.10", "android13-5.10", "android13-5.15"]:
@@ -671,16 +677,13 @@ CONFIG_ZRAM_WRITEBACK=y
             # 检查 vma_pages 是否存在
             if "if (!vma_pages(vma))" not in content:
                 logger.info("未找到 vma_pages，正在进行补丁修复")
-                fake_patched = True
 
-            # 如果 fake_patched=1，执行修复
-            if fake_patched:
+                # 执行修复
                 if "goto show_pad;" in content:
                     logger.info("执行 task_mmu.c 修复")
-                    subprocess.run(
-                        r"sed -i -e 's/goto show_pad;/return 0;/' fs/proc/task_mmu.c",
-                        shell=True, check=False
-                    )
+                    content = content.replace("goto show_pad;", "return 0;")
+                    with open(task_mmu_file, "w") as f:
+                        f.write(content)
 
         logger.info("=== task_mmu.c 修复完成 ===")
 
@@ -697,10 +700,12 @@ CONFIG_ZRAM_WRITEBACK=y
         # 检查是否需要添加头文件
         if "#include <linux/dma-buf.h>" not in content:
             logger.info("未找到 #include <linux/dma-buf.h>，添加缺失的头文件")
-            subprocess.run(
-                r"sed -i '/#include <linux\/cpufreq_times.h>/a #include <linux\/dma-buf.h>' fs/proc/base.c",
-                shell=True, check=False
+            content = content.replace(
+                "#include <linux/cpufreq_times.h>",
+                "#include <linux/cpufreq_times.h>\n#include <linux/dma-buf.h>"
             )
+            with open(base_c, "w") as f:
+                f.write(content)
     
     def configure_kernel(self) -> None:
         """配置内核"""

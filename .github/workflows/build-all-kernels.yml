@@ -1,0 +1,292 @@
+name: Build All Kernels
+
+permissions:
+  contents: write
+  actions: write
+
+on:
+  workflow_dispatch:
+    inputs:
+      kernelsu_version:
+        description: 'SukiSU 版本'
+        required: true
+        type: choice
+        options:
+          - Stable(标准)
+          - Dev(开发)
+        default: Stable(标准)
+      kernelsu_commit:
+        description: '指定 SukiSU commit hash (可选，留空使用最新)'
+        required: false
+        type: string
+        default: ''
+      susfs_commit:
+        description: '指定 SUSFS commit hash 或相对偏移 (如 HEAD~1)'
+        required: false
+        type: string
+        default: ''
+      use_zram:
+        description: '启用 ZRAM (LZ4KD)'
+        required: true
+        type: boolean
+        default: true
+      use_kpm:
+        description: '启用 KPM'
+        required: true
+        type: boolean
+        default: true
+      BBG:
+        description: '启用 Baseband-guard'
+        required: true
+        type: boolean
+        default: false
+      make_release:
+        description: '创建 GitHub Release'
+        required: true
+        type: boolean
+        default: true
+
+env:
+  PYTHON_VERSION: '3.10'
+  KSU_VERSION: ${{ github.event.inputs.kernelsu_version }}
+  KSU_COMMIT: ${{ github.event.inputs.kernelsu_commit }}
+  SUSFS_COMMIT: ${{ github.event.inputs.susfs_commit }}
+  USE_ZRAM: ${{ github.event.inputs.use_zram }}
+  USE_KPM: ${{ github.event.inputs.use_kpm }}
+  USE_BBG: ${{ github.event.inputs.BBG }}
+  MAKE_RELEASE: ${{ github.event.inputs.make_release }}
+
+jobs:
+  build-android12-5.10:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        sub_level: ["136", "198", "209", "236", "X"]
+        os_patch_level: ["2022-11", "2024-01", "2024-05", "2025-05", "lts"]
+        revision: ["r15", "r17", "r13", "r1", "r1"]
+        include:
+          - sub_level: "136"
+            os_patch_level: "2022-11"
+            revision: "r15"
+          - sub_level: "198"
+            os_patch_level: "2024-01"
+            revision: "r17"
+          - sub_level: "209"
+            os_patch_level: "2024-05"
+            revision: "r13"
+          - sub_level: "236"
+            os_patch_level: "2025-05"
+            revision: "r1"
+          - sub_level: "X"
+            os_patch_level: "lts"
+            revision: "r1"
+    steps:
+      - name: Build Android 12 5.10 (${{ matrix.os_patch_level }})
+        uses: ./.github/workflows/build-kernel.yml
+        with:
+          android_version: android12
+          kernel_version: "5.10"
+          sub_level: ${{ matrix.sub_level }}
+          os_patch_level: ${{ matrix.os_patch_level }}
+          revision: ${{ matrix.revision }}
+          kernelsu_version: ${{ env.KSU_VERSION }}
+          kernelsu_commit: ${{ env.KSU_COMMIT }}
+          susfs_commit: ${{ env.SUSFS_COMMIT }}
+          use_zram: ${{ env.USE_ZRAM }}
+          use_kpm: ${{ env.USE_KPM }}
+          BBG: ${{ env.USE_BBG }}
+          make_release: false
+
+  build-android13-5.10:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build Android 13 5.10 LTS
+        uses: ./.github/workflows/build-kernel.yml
+        with:
+          android_version: android13
+          kernel_version: "5.10"
+          sub_level: "X"
+          os_patch_level: "lts"
+          kernelsu_version: ${{ env.KSU_VERSION }}
+          kernelsu_commit: ${{ env.KSU_COMMIT }}
+          susfs_commit: ${{ env.SUSFS_COMMIT }}
+          use_zram: ${{ env.USE_ZRAM }}
+          use_kpm: ${{ env.USE_KPM }}
+          BBG: ${{ env.USE_BBG }}
+          make_release: false
+
+  build-android13-5.15:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - sub_level: "74"
+            os_patch_level: "2023-01"
+          - sub_level: "123"
+            os_patch_level: "2023-11"
+          - sub_level: "148"
+            os_patch_level: "2024-05"
+          - sub_level: "170"
+            os_patch_level: "2025-01"
+          - sub_level: "178"
+            os_patch_level: "2025-03"
+          - sub_level: "180"
+            os_patch_level: "2025-05"
+          - sub_level: "189"
+            os_patch_level: "2025-09"
+    steps:
+      - name: Build Android 13 5.15 (${{ matrix.os_patch_level }})
+        uses: ./.github/workflows/build-kernel.yml
+        with:
+          android_version: android13
+          kernel_version: "5.15"
+          sub_level: ${{ matrix.sub_level }}
+          os_patch_level: ${{ matrix.os_patch_level }}
+          kernelsu_version: ${{ env.KSU_VERSION }}
+          kernelsu_commit: ${{ env.KSU_COMMIT }}
+          susfs_commit: ${{ env.SUSFS_COMMIT }}
+          use_zram: ${{ env.USE_ZRAM }}
+          use_kpm: ${{ env.USE_KPM }}
+          BBG: ${{ env.USE_BBG }}
+          make_release: false
+
+  build-android14-5.15:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build Android 14 5.15 LTS
+        uses: ./.github/workflows/build-kernel.yml
+        with:
+          android_version: android14
+          kernel_version: "5.15"
+          sub_level: "X"
+          os_patch_level: "lts"
+          kernelsu_version: ${{ env.KSU_VERSION }}
+          kernelsu_commit: ${{ env.KSU_COMMIT }}
+          susfs_commit: ${{ env.SUSFS_COMMIT }}
+          use_zram: ${{ env.USE_ZRAM }}
+          use_kpm: ${{ env.USE_KPM }}
+          BBG: ${{ env.USE_BBG }}
+          make_release: false
+
+  build-android14-6.1:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - sub_level: "78"
+            os_patch_level: "2024-06"
+          - sub_level: "90"
+            os_patch_level: "2024-08"
+          - sub_level: "99"
+            os_patch_level: "2024-10"
+          - sub_level: "124"
+            os_patch_level: "2025-02"
+          - sub_level: "145"
+            os_patch_level: "2025-09"
+    steps:
+      - name: Build Android 14 6.1 (${{ matrix.os_patch_level }})
+        uses: ./.github/workflows/build-kernel.yml
+        with:
+          android_version: android14
+          kernel_version: "6.1"
+          sub_level: ${{ matrix.sub_level }}
+          os_patch_level: ${{ matrix.os_patch_level }}
+          kernelsu_version: ${{ env.KSU_VERSION }}
+          kernelsu_commit: ${{ env.KSU_COMMIT }}
+          susfs_commit: ${{ env.SUSFS_COMMIT }}
+          use_zram: ${{ env.USE_ZRAM }}
+          use_kpm: ${{ env.USE_KPM }}
+          BBG: ${{ env.USE_BBG }}
+          make_release: false
+
+  build-android15-6.6:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - sub_level: "50"
+            os_patch_level: "2024-10"
+          - sub_level: "66"
+            os_patch_level: "2025-02"
+          - sub_level: "102"
+            os_patch_level: "2025-10"
+    steps:
+      - name: Build Android 15 6.6 (${{ matrix.os_patch_level }})
+        uses: ./.github/workflows/build-kernel.yml
+        with:
+          android_version: android15
+          kernel_version: "6.6"
+          sub_level: ${{ matrix.sub_level }}
+          os_patch_level: ${{ matrix.os_patch_level }}
+          kernelsu_version: ${{ env.KSU_VERSION }}
+          kernelsu_commit: ${{ env.KSU_COMMIT }}
+          susfs_commit: ${{ env.SUSFS_COMMIT }}
+          use_zram: ${{ env.USE_ZRAM }}
+          use_kpm: ${{ env.USE_KPM }}
+          BBG: ${{ env.USE_BBG }}
+          make_release: false
+
+  release:
+    needs: [build-android12-5.10, build-android13-5.10, build-android13-5.15, build-android14-5.15, build-android14-6.1, build-android15-6.6]
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.make_release == 'true' }}
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: all-artifacts
+          pattern: '*_kernel-*'
+          merge-multiple: true
+
+      - name: Generate checksums
+        run: |
+          echo "=== Creating checksums ==="
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Get SukiSU info
+        run: |
+          KSU_TAG=$(git ls-remote --tags https://github.com/SukiSU-Ultra/SukiSU-Ultra.git | grep -o 'refs/tags/.*' | cut -d'/' -f3 | head -n1 || echo "latest")
+          KSU_COMMIT=$(git ls-remote https://github.com/SukiSU-Ultra/SukiSU-Ultra.git refs/heads/main | awk '{ print $1 }' | cut -c1-7)
+          echo "KSU_TAG=$KSU_TAG" >> $GITHUB_ENV
+          echo "KSU_COMMIT=$KSU_COMMIT" >> $GITHUB_ENV
+          echo "RELEASE_NAME=GKI Kernel: SukiSU ($KSU_TAG) & SUSFS v2.1.0" >> $GITHUB_ENV
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v2.1.0-${{ github.run_number }}
+          name: ${{ env.RELEASE_NAME }}
+          draft: true
+          files: |
+            *AnyKernel3*.zip
+            *.img
+            SHA256SUMS.txt
+          body: |
+            ## GKI Kernel with SukiSU & SUSFS v2.1.0
+
+            ### SukiSU Info
+            - Tag: `${{ env.KSU_TAG }}`
+            - Commit: `${{ env.KSU_COMMIT }}`
+
+            ### Supported Configurations
+            - Android 12 (Kernel 5.10)
+            - Android 13 (Kernel 5.10, 5.15)
+            - Android 14 (Kernel 5.15, 6.1)
+            - Android 15 (Kernel 6.6)
+
+            ### Features
+            - SUSFS v2.1.0
+            - Manual Syscall Hooks
+            - Magic Mount Support
+            - BBR Support
+            - LZ4KD Support

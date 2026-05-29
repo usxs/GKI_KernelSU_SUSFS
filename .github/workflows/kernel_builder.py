@@ -359,10 +359,14 @@ CONFIG_ZRAM_WRITEBACK=y
         if "deprecated" in remote_branch:
             logger.info("检测到 deprecated 分支，修改 manifest...")
             manifest_path = self.work_dir / ".repo/manifests/default.xml"
-            subprocess.run(
-                f"sed -i 's/\"{formatted_branch}\"/\"deprecated\\/{formatted_branch}\"/g' {manifest_path}",
-                shell=True, check=False
+            with open(manifest_path, "r") as f:
+                content = f.read()
+            content = content.replace(
+                f'"{formatted_branch}"',
+                f'"deprecated/{formatted_branch}"'
             )
+            with open(manifest_path, "w") as f:
+                f.write(content)
         
         # 保存 REMOTE_BRANCH 到环境变量
         self.env["REMOTE_BRANCH"] = remote_branch
@@ -503,11 +507,29 @@ CONFIG_ZRAM_WRITEBACK=y
         # 修改 LSM Kconfig
         kconfig_file = common_dir / "security/Kconfig"
         if kconfig_file.exists():
-            subprocess.run(
-                r"sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/lockdown/lockdown,baseband_guard/ } }' security/Kconfig",
-                shell=True, check=False
-            )
-        
+            with open(kconfig_file, "r") as f:
+                content = f.read()
+
+            # 在 config LSM 块中找到 default 行，添加 baseband_guard
+            import re
+            # 匹配 config LSM 块
+            pattern = r'(config LSM.*?)(default .*)(\n.*?help)'
+            def replace_default(match):
+                prefix = match.group(1)
+                default_line = match.group(2)
+                suffix = match.group(3)
+                # 如果已经有 baseband_guard，跳过
+                if 'baseband_guard' in default_line:
+                    return match.group(0)
+                # 如果有 lockdown，替换它
+                if 'lockdown' in default_line:
+                    default_line = default_line.replace('lockdown', 'lockdown,baseband_guard')
+                return prefix + default_line + suffix
+
+            content = re.sub(pattern, replace_default, content, flags=re.DOTALL)
+            with open(kconfig_file, "w") as f:
+                f.write(content)
+
         logger.info("=== Baseband-guard 添加完成 ===")
     
     def apply_susfs_patches(self) -> None:
@@ -618,7 +640,6 @@ CONFIG_ZRAM_WRITEBACK=y
             if "unsigned int nr_subpages = __PAGE_SIZE / PAGE_SIZE;" not in content:
                 logger.info("未找到 nr_subpages，正在进行补丁修复")
 
-                # 使用 Python 直接修改文件
                 lines = content.split('\n')
                 new_lines = []
                 inserted = False
@@ -746,53 +767,71 @@ CONFIG_ZRAM_WRITEBACK=y
         # 移除 check_defconfig
         build_config = self.work_dir / "common/build.config.gki"
         if build_config.exists():
-            subprocess.run(
-                "sed -i 's/check_defconfig//' common/build.config.gki",
-                shell=True, check=False
-            )
-        
+            with open(build_config, "r") as f:
+                content = f.read()
+            content = content.replace("check_defconfig", "")
+            with open(build_config, "w") as f:
+                f.write(content)
+
         logger.info("=== 内核配置完成 ===")
     
     def _configure_zram(self) -> None:
         """配置 ZRAM"""
         config_file = self.work_dir / "common/arch/arm64/configs/gki_defconfig"
         kv = self.config.kernel_version
-        
+
+        # 读取配置文件
+        with open(config_file, "r") as f:
+            content = f.read()
+
         if kv == "5.10":
             with open(config_file, "a") as f:
                 f.write(self.ZRAM_CONFIG_5_10)
         elif kv == "6.6":
+            content = content.replace("CONFIG_ZRAM=m", "CONFIG_ZRAM=y")
+            with open(config_file, "w") as f:
+                f.write(content)
             with open(config_file, "a") as f:
                 f.write("CONFIG_ZSMALLOC=y\n")
-                subprocess.run(
-                    "sed -i 's/CONFIG_ZRAM=m/CONFIG_ZRAM=y/g' common/arch/arm64/configs/gki_defconfig",
-                    shell=True, check=False
-                )
         else:  # 5.15, 6.1
+            content = content.replace("CONFIG_ZRAM=m", "CONFIG_ZRAM=y")
+            with open(config_file, "w") as f:
+                f.write(content)
             with open(config_file, "a") as f:
                 f.write("CONFIG_ZSMALLOC=y\n")
-                subprocess.run(
-                    "sed -i 's/CONFIG_ZRAM=m/CONFIG_ZRAM=y/g' common/arch/arm64/configs/gki_defconfig",
-                    shell=True, check=False
-                )
-        
+
         with open(config_file, "a") as f:
             f.write(self.ZRAM_CONFIG_COMMON)
     
     def _configure_bazel(self) -> None:
         """配置 Bazel 构建"""
         modules_bzl = self.work_dir / "common/modules.bzl"
-        
+
         if modules_bzl.exists():
-            subprocess.run(
-                r"sed -i 's/\"drivers\/block\/zram\/zram\.ko\",//g; s/\"mm\/zsmalloc\.ko\",//g' common/modules.bzl",
-                shell=True, check=False
-            )
-        
+            logger.info("修改 modules.bzl 移除 zram 和 zsmalloc")
+            with open(modules_bzl, "r") as f:
+                content = f.read()
+
+            # 移除 zram 和 zsmalloc 模块
+            modified = False
+            if '"drivers/block/zram/zram.ko",' in content:
+                content = content.replace('"drivers/block/zram/zram.ko",\n', '')
+                content = content.replace('"drivers/block/zram/zram.ko",', '')
+                modified = True
+            if '"mm/zsmalloc.ko",' in content:
+                content = content.replace('"mm/zsmalloc.ko",\n', '')
+                content = content.replace('"mm/zsmalloc.ko",', '')
+                modified = True
+
+            if modified:
+                with open(modules_bzl, "w") as f:
+                    f.write(content)
+                logger.info("已移除 zram 和 zsmalloc 模块引用")
+
         config_file = self.work_dir / "common/arch/arm64/configs/gki_defconfig"
         with open(config_file, "a") as f:
             f.write("CONFIG_MODULE_SIG_FORCE=n\n")
-        
+
         logger.info("Bazel 配置完成")
     
     def configure_kernel_name(self) -> None:
@@ -805,16 +844,30 @@ CONFIG_ZRAM_WRITEBACK=y
         # 配置版本号
         setlocalversion = self.work_dir / "common/scripts/setlocalversion"
         if setlocalversion.exists():
+            with open(setlocalversion, "r") as f:
+                content = f.read()
+
             if self.config.custom_version:
-                subprocess.run(
-                    f"sed -i '$s|echo \"\\$res\"|echo \"{self.config.custom_version}\"|' common/scripts/setlocalversion",
-                    shell=True, check=False
-                )
+                # 替换最后一行的 echo "$res" 为自定义版本
+                lines = content.split('\n')
+                for i, line in enumerate(lines):
+                    if 'echo "$res"' in line and not self.config.custom_version in line:
+                        lines[i] = f'\techo "{self.config.custom_version}"'
+                        break
+                with open(setlocalversion, "w") as f:
+                    f.write('\n'.join(lines))
             else:
-                subprocess.run(
-                    r"sed -i '$s|echo \"\$res\"|echo \"\$res-zakozakoooooo-1145141919\"|' common/scripts/setlocalversion",
-                    shell=True, check=False
-                )
+                # 添加后缀
+                lines = content.split('\n')
+                for i, line in enumerate(lines):
+                    if 'echo "$res"' in line:
+                        lines[i] = line.replace(
+                            'echo "$res"',
+                            'echo "$res-zakozakoooooo-1145141919"'
+                        )
+                        break
+                with open(setlocalversion, "w") as f:
+                    f.write('\n'.join(lines))
 
         # 配置构建时间
         import datetime
@@ -823,55 +876,79 @@ CONFIG_ZRAM_WRITEBACK=y
 
         mkcompile_h = self.work_dir / "common/scripts/mkcompile_h"
         if mkcompile_h.exists():
-            perl_cmd = rf'''perl -pi -e 's{{UTS_VERSION="\\\$(echo \\\$UTS_VERSION \\\$CONFIG_FLAGS \\\$TIMESTAMP | cut -b -\\\$UTS_LEN)"}}{{UTS_VERSION="#1 SMP PREEMPT {current_time}"}}' common/scripts/mkcompile_h'''
-            subprocess.run(perl_cmd, shell=True, check=False)
+            with open(mkcompile_h, "r") as f:
+                content = f.read()
+            content = content.replace(
+                'UTS_VERSION="$(echo $UTS_VERSION $CONFIG_FLAGS $TIMESTAMP | cut -b -$UTS_LEN)"',
+                f'UTS_VERSION="#1 SMP PREEMPT {current_time}"'
+            )
+            with open(mkcompile_h, "w") as f:
+                f.write(content)
 
         # 6.1 和 6.6 内核额外配置
         if self.config.kernel_version in ["6.1", "6.6"]:
             init_makefile = self.work_dir / "common/init/Makefile"
             if init_makefile.exists():
-                subprocess.run(
-                    rf"sed -i 's|\$(preempt-flag-y) \"\$(build-timestamp)\"|\$(preempt-flag-y) \"{current_time}\"|' common/init/Makefile",
-                    shell=True, check=False
+                with open(init_makefile, "r") as f:
+                    content = f.read()
+                content = content.replace(
+                    '$(preempt-flag-y) "$(build-timestamp)"',
+                    f'$(preempt-flag-y) "{current_time}"'
                 )
-        
+                with open(init_makefile, "w") as f:
+                    f.write(content)
+
         # Bazel 配置
         if not (self.work_dir / "build/build.sh").exists():
             # Bazel 构建
             bazel_build = self.work_dir / "common/BUILD.bazel"
             if bazel_build.exists():
-                subprocess.run(
-                    r"sed -i '/^[[:space:]]*\"protected_exports_list\"[[:space:]]*:[[:space:]]*\"android\/abi_gki_protected_exports_aarch64\",$/d' common/BUILD.bazel",
-                    shell=True, check=False
-                )
-            
+                with open(bazel_build, "r") as f:
+                    content = f.read()
+                # 删除 protected_exports_list 行
+                lines = [l for l in content.split('\n')
+                        if '"protected_exports_list"' not in l or 'android/abi_gki_protected_exports_aarch64' not in l]
+                with open(bazel_build, "w") as f:
+                    f.write('\n'.join(lines))
+
             # 删除 abi 目录
             abi_dir = self.work_dir / "common/android/abi_gki_protected_exports_aarch64"
             if abi_dir.exists():
-                subprocess.run(f"rm -rf {abi_dir}", shell=True, check=False)
-            
+                import shutil
+                shutil.rmtree(abi_dir)
+
             # 修改 stamp.bzl
             stamp_bzl = self.work_dir / "build/kernel/kleaf/impl/stamp.bzl"
             if stamp_bzl.exists():
-                subprocess.run(
-                    r"sed -i '/stable_scmversion_cmd/s/-maybe-dirty//g' build/kernel/kleaf/impl/stamp.bzl",
-                    shell=True, check=False
-                )
-            
+                with open(stamp_bzl, "r") as f:
+                    content = f.read()
+                content = content.replace("-maybe-dirty", "")
+                with open(stamp_bzl, "w") as f:
+                    f.write(content)
+
             # 设置 LOCALVERSION
             if self.config.custom_version:
-                subprocess.run(
-                    f"sed -i '/^CONFIG_LOCALVERSION=/ s/=\"\\([^\"]*\\)\"/=\"{self.config.custom_version}\"/' common/arch/arm64/configs/gki_defconfig",
-                    shell=True, check=False
+                config_file = self.work_dir / "common/arch/arm64/configs/gki_defconfig"
+                with open(config_file, "r") as f:
+                    content = f.read()
+                import re
+                content = re.sub(
+                    r'^CONFIG_LOCALVERSION=".*"$',
+                    f'CONFIG_LOCALVERSION="{self.config.custom_version}"',
+                    content,
+                    flags=re.MULTILINE
                 )
-        
+                with open(config_file, "w") as f:
+                    f.write(content)
+
         # 移除 -dirty
         if (self.work_dir / "build/build.sh").exists():
-            subprocess.run(
-                "sed -i 's/-dirty//' common/scripts/setlocalversion",
-                shell=True, check=False
-            )
-        
+            with open(setlocalversion, "r") as f:
+                content = f.read()
+            content = content.replace("-dirty", "")
+            with open(setlocalversion, "w") as f:
+                f.write(content)
+
         logger.info("=== 内核名称配置完成 ===")
     
     def build_kernel(self) -> bool:
@@ -883,18 +960,18 @@ CONFIG_ZRAM_WRITEBACK=y
         # 修改 build.config
         build_config_aarch64 = self.work_dir / "common/build.config.gki.aarch64"
         if build_config_aarch64.exists():
-            subprocess.run(
-                "sed -i 's/BUILD_SYSTEM_DLKM=1/BUILD_SYSTEM_DLKM=0/' common/build.config.gki.aarch64",
-                shell=True, check=False
-            )
-            subprocess.run(
-                "sed -i '/MODULES_ORDER=android\\/gki_aarch64_modules/d' common/build.config.gki.aarch64",
-                shell=True, check=False
-            )
-            subprocess.run(
-                "sed -i '/KMI_SYMBOL_LIST_STRICT_MODE/d' common/build.config.gki.aarch64",
-                shell=True, check=False
-            )
+            with open(build_config_aarch64, "r") as f:
+                content = f.read()
+
+            content = content.replace("BUILD_SYSTEM_DLKM=1", "BUILD_SYSTEM_DLKM=0")
+
+            # 删除包含 MODULES_ORDER 的行
+            lines = [l for l in content.split('\n') if 'MODULES_ORDER=android/gki_aarch64_modules' not in l]
+            # 删除包含 KMI_SYMBOL_LIST_STRICT_MODE 的行
+            lines = [l for l in lines if 'KMI_SYMBOL_LIST_STRICT_MODE' not in l]
+
+            with open(build_config_aarch64, "w") as f:
+                f.write('\n'.join(lines))
         
         # 执行构建
         try:

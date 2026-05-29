@@ -597,73 +597,106 @@ CONFIG_ZRAM_WRITEBACK=y
     def apply_task_mmu_fixes(self) -> None:
         """应用 task_mmu.c 修复"""
         logger.info("=== 应用 task_mmu.c 修复 ===")
-        
+
         self._chdir(self.work_dir / "common")
-        
+
         task_mmu_file = Path("fs/proc/task_mmu.c")
         if not task_mmu_file.exists():
+            logger.warning("task_mmu.c 文件不存在，跳过修复")
             return
-        
+
+        av = self.config.android_version
         kv = self.config.kernel_version
-        
-        # 根据内核版本应用不同的修复
-        if kv == "6.6":
-            self._apply_task_mmu_fix_6_6()
-        elif kv in ["5.10", "5.15"]:
-            self._apply_task_mmu_fix_5_x()
-        elif kv == "6.1":
-            self._apply_task_mmu_fix_6_1()
-        
-        # 修复 base.c 头文件
-        self._fix_base_c_header()
-        
+        formatted_branch = f"{av}-{kv}"
+
+        fake_patched = False
+
+        # android15-6.6 修复
+        if formatted_branch == "android15-6.6":
+            with open(task_mmu_file, "r") as f:
+                content = f.read()
+
+            # 检查是否需要添加 nr_subpages
+            if "unsigned int nr_subpages = __PAGE_SIZE / PAGE_SIZE;" not in content:
+                logger.info("未找到 nr_subpages，正在进行补丁修复")
+                subprocess.run(
+                    r"sed -i -e '/int ret = 0, copied = 0;/a \\tunsigned int nr_subpages = __PAGE_SIZE / PAGE_SIZE;' "
+                    r"-e '/int ret = 0, copied = 0;/a \\tpagemap_entry_t *res = NULL;' fs/proc/task_mmu.c",
+                    shell=True, check=False
+                )
+                fake_patched = True
+
+            # 修复 base.c 头文件
+            self._fix_base_c_header()
+
+            # 如果 fake_patched=1，撤销刚才的修改
+            if fake_patched:
+                with open(task_mmu_file, "r") as f:
+                    content = f.read()
+                if "unsigned int nr_subpages = __PAGE_SIZE / PAGE_SIZE;" in content:
+                    logger.info("撤销 task_mmu.c 的修改")
+                    subprocess.run(
+                        r"sed -i -e '/unsigned int nr_subpages = __PAGE_SIZE \/ PAGE_SIZE;/d' "
+                        r"-e '/pagemap_entry_t \*res = NULL;/d' fs/proc/task_mmu.c",
+                        shell=True, check=False
+                    )
+
+        # android14-6.1 修复
+        elif formatted_branch == "android14-6.1":
+            with open(task_mmu_file, "r") as f:
+                content = f.read()
+
+            # 检查 vma_pages 是否存在
+            if "if (!vma_pages(vma))" not in content:
+                logger.info("未找到 vma_pages，正在进行补丁修复")
+                fake_patched = True
+
+            # 修复 base.c 头文件
+            self._fix_base_c_header()
+
+            # 如果 fake_patched=1，执行修复
+            if fake_patched:
+                if "goto show_pad;" in content:
+                    logger.info("执行 task_mmu.c 修复")
+                    subprocess.run(
+                        r"sed -i -e 's/goto show_pad;/return 0;/' fs/proc/task_mmu.c",
+                        shell=True, check=False
+                    )
+
+        # android12-5.10, android13-5.10, android13-5.15 修复
+        elif formatted_branch in ["android12-5.10", "android13-5.10", "android13-5.15"]:
+            with open(task_mmu_file, "r") as f:
+                content = f.read()
+
+            # 检查 vma_pages 是否存在
+            if "if (!vma_pages(vma))" not in content:
+                logger.info("未找到 vma_pages，正在进行补丁修复")
+                fake_patched = True
+
+            # 如果 fake_patched=1，执行修复
+            if fake_patched:
+                if "goto show_pad;" in content:
+                    logger.info("执行 task_mmu.c 修复")
+                    subprocess.run(
+                        r"sed -i -e 's/goto show_pad;/return 0;/' fs/proc/task_mmu.c",
+                        shell=True, check=False
+                    )
+
         logger.info("=== task_mmu.c 修复完成 ===")
-    
-    def _apply_task_mmu_fix_6_6(self) -> None:
-        """修复 6.6 内核的 task_mmu.c"""
-        task_mmu = self.work_dir / "common/fs/proc/task_mmu.c"
-        
-        with open(task_mmu, "r") as f:
-            content = f.read()
-        
-        # 检查是否需要添加 nr_subpages
-        if "unsigned int nr_subpages = __PAGE_SIZE / PAGE_SIZE;" not in content:
-            subprocess.run(
-                r"sed -i -e '/int ret = 0, copied = 0;/a \\\tunsigned int nr_subpages = __PAGE_SIZE / PAGE_SIZE;' "
-                r"-e '/int ret = 0, copied = 0;/a \\\tpagemap_entry_t \*res = NULL;' fs/proc/task_mmu.c",
-                shell=True, check=False
-            )
-    
-    def _apply_task_mmu_fix_5_x(self) -> None:
-        """修复 5.x 内核的 task_mmu.c"""
-        task_mmu = self.work_dir / "common/fs/proc/task_mmu.c"
-        
-        with open(task_mmu, "r") as f:
-            content = f.read()
-        
-        # 检查是否需要添加 vma_pages
-        if "if (!vma_pages(vma))" not in content:
-            subprocess.run(
-                r"sed -i -e 's/goto show_pad;/return 0;/' fs/proc/task_mmu.c",
-                shell=True, check=False
-            )
-    
-    def _apply_task_mmu_fix_6_1(self) -> None:
-        """修复 6.1 内核的 task_mmu.c"""
-        self._apply_task_mmu_fix_5_x()  # 6.1 使用与 5.x 相同的修复
-    
+
     def _fix_base_c_header(self) -> None:
         """修复 base.c 头文件"""
         base_c = self.work_dir / "common/fs/proc/base.c"
-        
+
         if not base_c.exists():
             return
-        
+
         with open(base_c, "r") as f:
             content = f.read()
-        
+
         # 检查是否需要添加头文件
         if "#include <linux/dma-buf.h>" not in content:
+            logger.info("未找到 #include <linux/dma-buf.h>，添加缺失的头文件")
             subprocess.run(
                 r"sed -i '/#include <linux\/cpufreq_times.h>/a #include <linux\/dma-buf.h>' fs/proc/base.c",
                 shell=True, check=False

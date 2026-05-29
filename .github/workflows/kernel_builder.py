@@ -851,23 +851,14 @@ CONFIG_ZRAM_WRITEBACK=y
                 # 替换最后一行的 echo "$res" 为自定义版本
                 lines = content.split('\n')
                 for i, line in enumerate(lines):
-                    if 'echo "$res"' in line and not self.config.custom_version in line:
+                    if 'echo "$res"' in line:
                         lines[i] = f'\techo "{self.config.custom_version}"'
                         break
                 with open(setlocalversion, "w") as f:
                     f.write('\n'.join(lines))
+                logger.info(f"已设置自定义版本: {self.config.custom_version}")
             else:
-                # 添加后缀
-                lines = content.split('\n')
-                for i, line in enumerate(lines):
-                    if 'echo "$res"' in line:
-                        lines[i] = line.replace(
-                            'echo "$res"',
-                            'echo "$res-zakozakoooooo-1145141919"'
-                        )
-                        break
-                with open(setlocalversion, "w") as f:
-                    f.write('\n'.join(lines))
+                logger.info("未设置自定义版本，使用默认值")
 
         # 配置构建时间
         import datetime
@@ -945,9 +936,10 @@ CONFIG_ZRAM_WRITEBACK=y
         if (self.work_dir / "build/build.sh").exists():
             with open(setlocalversion, "r") as f:
                 content = f.read()
-            content = content.replace("-dirty", "")
-            with open(setlocalversion, "w") as f:
-                f.write(content)
+            if "-dirty" in content:
+                content = content.replace("-dirty", "")
+                with open(setlocalversion, "w") as f:
+                    f.write(content)
 
         logger.info("=== 内核名称配置完成 ===")
     

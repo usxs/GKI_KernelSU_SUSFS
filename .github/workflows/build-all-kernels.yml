@@ -62,9 +62,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        sub_level: ["136", "198", "209", "236", "X"]
-        os_patch_level: ["2022-11", "2024-01", "2024-05", "2025-05", "lts"]
-        revision: ["r15", "r17", "r13", "r1", "r1"]
         include:
           - sub_level: "136"
             os_patch_level: "2022-11"
@@ -82,39 +79,114 @@ jobs:
             os_patch_level: "lts"
             revision: "r1"
     steps:
-      - name: Build Android 12 5.10 (${{ matrix.os_patch_level }})
-        uses: ./.github/workflows/build-kernel.yml
+      - name: Maximize build space
+        uses: AdityaGarg8/remove-unwanted-software@v5
         with:
-          android_version: android12
-          kernel_version: "5.10"
-          sub_level: ${{ matrix.sub_level }}
-          os_patch_level: ${{ matrix.os_patch_level }}
-          revision: ${{ matrix.revision }}
-          kernelsu_version: ${{ env.KSU_VERSION }}
-          kernelsu_commit: ${{ env.KSU_COMMIT }}
-          susfs_commit: ${{ env.SUSFS_COMMIT }}
-          use_zram: ${{ env.USE_ZRAM }}
-          use_kpm: ${{ env.USE_KPM }}
-          BBG: ${{ env.USE_BBG }}
-          make_release: false
+          remove-dotnet: 'true'
+          remove-android: 'true'
+          remove-haskell: 'true'
+          remove-codeql: 'true'
+          remove-docker-images: 'true'
+          remove-large-packages: 'true'
+          remove-swapfile: 'true'
+          verbose: 'true'
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          sudo apt update && sudo apt upgrade -y
+          sudo apt install -y ccache python3 git curl wget zip unzip
+          pip install PyYAML
+
+      - name: Configure ccache
+        run: |
+          mkdir -p ~/.cache/bazel
+          ccache --version
+          ccache --max-size=2G
+          ccache --set-config=compression=true
+          echo "CCACHE_DIR=$HOME/.ccache" >> $GITHUB_ENV
+
+      - name: Build Android 12 5.10
+        run: |
+          cd ./.github/workflows
+          ARGS="--android android12 --kernel 5.10 --sub-level ${{ matrix.sub_level }} --os-patch ${{ matrix.os_patch_level }} --ksu-version ${{ env.KSU_VERSION }} --no-release"
+          [ "${{ env.USE_ZRAM }}" = "false" ] && ARGS="$ARGS --no-zram"
+          [ "${{ env.USE_KPM }}" = "false" ] && ARGS="$ARGS --no-kpm"
+          [ "${{ env.USE_BBG }}" = "true" ] && ARGS="$ARGS --bbg"
+          [ -n "${{ env.KSU_COMMIT }}" ] && ARGS="$ARGS --ksu-commit ${{ env.KSU_COMMIT }}"
+          [ -n "${{ env.SUSFS_COMMIT }}" ] && ARGS="$ARGS --susfs-commit ${{ env.SUSFS_COMMIT }}"
+          python3 build.py $ARGS
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel-android12-5-10-${{ matrix.sub_level }}
+          path: |
+            *.zip
+            *.img
 
   build-android13-5-10:
     runs-on: ubuntu-latest
     steps:
-      - name: Build Android 13 5.10 LTS
-        uses: ./.github/workflows/build-kernel.yml
+      - name: Maximize build space
+        uses: AdityaGarg8/remove-unwanted-software@v5
         with:
-          android_version: android13
-          kernel_version: "5.10"
-          sub_level: "X"
-          os_patch_level: "lts"
-          kernelsu_version: ${{ env.KSU_VERSION }}
-          kernelsu_commit: ${{ env.KSU_COMMIT }}
-          susfs_commit: ${{ env.SUSFS_COMMIT }}
-          use_zram: ${{ env.USE_ZRAM }}
-          use_kpm: ${{ env.USE_KPM }}
-          BBG: ${{ env.USE_BBG }}
-          make_release: false
+          remove-dotnet: 'true'
+          remove-android: 'true'
+          remove-haskell: 'true'
+          remove-codeql: 'true'
+          remove-docker-images: 'true'
+          remove-large-packages: 'true'
+          remove-swapfile: 'true'
+          verbose: 'true'
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          sudo apt update && sudo apt upgrade -y
+          sudo apt install -y ccache python3 git curl wget zip unzip
+          pip install PyYAML
+
+      - name: Configure ccache
+        run: |
+          mkdir -p ~/.cache/bazel
+          ccache --version
+          ccache --max-size=2G
+          ccache --set-config=compression=true
+          echo "CCACHE_DIR=$HOME/.ccache" >> $GITHUB_ENV
+
+      - name: Build Android 13 5.10 LTS
+        run: |
+          cd ./.github/workflows
+          ARGS="--android android13 --kernel 5.10 --sub-level X --os-patch lts --ksu-version ${{ env.KSU_VERSION }} --no-release"
+          [ "${{ env.USE_ZRAM }}" = "false" ] && ARGS="$ARGS --no-zram"
+          [ "${{ env.USE_KPM }}" = "false" ] && ARGS="$ARGS --no-kpm"
+          [ "${{ env.USE_BBG }}" = "true" ] && ARGS="$ARGS --bbg"
+          [ -n "${{ env.KSU_COMMIT }}" ] && ARGS="$ARGS --ksu-commit ${{ env.KSU_COMMIT }}"
+          [ -n "${{ env.SUSFS_COMMIT }}" ] && ARGS="$ARGS --susfs-commit ${{ env.SUSFS_COMMIT }}"
+          python3 build.py $ARGS
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel-android13-5-10-X
+          path: |
+            *.zip
+            *.img
 
   build-android13-5-15:
     runs-on: ubuntu-latest
@@ -137,38 +209,114 @@ jobs:
           - sub_level: "189"
             os_patch_level: "2025-09"
     steps:
-      - name: Build Android 13 5.15 (${{ matrix.os_patch_level }})
-        uses: ./.github/workflows/build-kernel.yml
+      - name: Maximize build space
+        uses: AdityaGarg8/remove-unwanted-software@v5
         with:
-          android_version: android13
-          kernel_version: "5.15"
-          sub_level: ${{ matrix.sub_level }}
-          os_patch_level: ${{ matrix.os_patch_level }}
-          kernelsu_version: ${{ env.KSU_VERSION }}
-          kernelsu_commit: ${{ env.KSU_COMMIT }}
-          susfs_commit: ${{ env.SUSFS_COMMIT }}
-          use_zram: ${{ env.USE_ZRAM }}
-          use_kpm: ${{ env.USE_KPM }}
-          BBG: ${{ env.USE_BBG }}
-          make_release: false
+          remove-dotnet: 'true'
+          remove-android: 'true'
+          remove-haskell: 'true'
+          remove-codeql: 'true'
+          remove-docker-images: 'true'
+          remove-large-packages: 'true'
+          remove-swapfile: 'true'
+          verbose: 'true'
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          sudo apt update && sudo apt upgrade -y
+          sudo apt install -y ccache python3 git curl wget zip unzip
+          pip install PyYAML
+
+      - name: Configure ccache
+        run: |
+          mkdir -p ~/.cache/bazel
+          ccache --version
+          ccache --max-size=2G
+          ccache --set-config=compression=true
+          echo "CCACHE_DIR=$HOME/.ccache" >> $GITHUB_ENV
+
+      - name: Build Android 13 5.15
+        run: |
+          cd ./.github/workflows
+          ARGS="--android android13 --kernel 5.15 --sub-level ${{ matrix.sub_level }} --os-patch ${{ matrix.os_patch_level }} --ksu-version ${{ env.KSU_VERSION }} --no-release"
+          [ "${{ env.USE_ZRAM }}" = "false" ] && ARGS="$ARGS --no-zram"
+          [ "${{ env.USE_KPM }}" = "false" ] && ARGS="$ARGS --no-kpm"
+          [ "${{ env.USE_BBG }}" = "true" ] && ARGS="$ARGS --bbg"
+          [ -n "${{ env.KSU_COMMIT }}" ] && ARGS="$ARGS --ksu-commit ${{ env.KSU_COMMIT }}"
+          [ -n "${{ env.SUSFS_COMMIT }}" ] && ARGS="$ARGS --susfs-commit ${{ env.SUSFS_COMMIT }}"
+          python3 build.py $ARGS
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel-android13-5-15-${{ matrix.sub_level }}
+          path: |
+            *.zip
+            *.img
 
   build-android14-5-15:
     runs-on: ubuntu-latest
     steps:
-      - name: Build Android 14 5.15 LTS
-        uses: ./.github/workflows/build-kernel.yml
+      - name: Maximize build space
+        uses: AdityaGarg8/remove-unwanted-software@v5
         with:
-          android_version: android14
-          kernel_version: "5.15"
-          sub_level: "X"
-          os_patch_level: "lts"
-          kernelsu_version: ${{ env.KSU_VERSION }}
-          kernelsu_commit: ${{ env.KSU_COMMIT }}
-          susfs_commit: ${{ env.SUSFS_COMMIT }}
-          use_zram: ${{ env.USE_ZRAM }}
-          use_kpm: ${{ env.USE_KPM }}
-          BBG: ${{ env.USE_BBG }}
-          make_release: false
+          remove-dotnet: 'true'
+          remove-android: 'true'
+          remove-haskell: 'true'
+          remove-codeql: 'true'
+          remove-docker-images: 'true'
+          remove-large-packages: 'true'
+          remove-swapfile: 'true'
+          verbose: 'true'
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          sudo apt update && sudo apt upgrade -y
+          sudo apt install -y ccache python3 git curl wget zip unzip
+          pip install PyYAML
+
+      - name: Configure ccache
+        run: |
+          mkdir -p ~/.cache/bazel
+          ccache --version
+          ccache --max-size=2G
+          ccache --set-config=compression=true
+          echo "CCACHE_DIR=$HOME/.ccache" >> $GITHUB_ENV
+
+      - name: Build Android 14 5.15 LTS
+        run: |
+          cd ./.github/workflows
+          ARGS="--android android14 --kernel 5.15 --sub-level X --os-patch lts --ksu-version ${{ env.KSU_VERSION }} --no-release"
+          [ "${{ env.USE_ZRAM }}" = "false" ] && ARGS="$ARGS --no-zram"
+          [ "${{ env.USE_KPM }}" = "false" ] && ARGS="$ARGS --no-kpm"
+          [ "${{ env.USE_BBG }}" = "true" ] && ARGS="$ARGS --bbg"
+          [ -n "${{ env.KSU_COMMIT }}" ] && ARGS="$ARGS --ksu-commit ${{ env.KSU_COMMIT }}"
+          [ -n "${{ env.SUSFS_COMMIT }}" ] && ARGS="$ARGS --susfs-commit ${{ env.SUSFS_COMMIT }}"
+          python3 build.py $ARGS
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel-android14-5-15-X
+          path: |
+            *.zip
+            *.img
 
   build-android14-6-1:
     runs-on: ubuntu-latest
@@ -187,20 +335,58 @@ jobs:
           - sub_level: "145"
             os_patch_level: "2025-09"
     steps:
-      - name: Build Android 14 6.1 (${{ matrix.os_patch_level }})
-        uses: ./.github/workflows/build-kernel.yml
+      - name: Maximize build space
+        uses: AdityaGarg8/remove-unwanted-software@v5
         with:
-          android_version: android14
-          kernel_version: "6.1"
-          sub_level: ${{ matrix.sub_level }}
-          os_patch_level: ${{ matrix.os_patch_level }}
-          kernelsu_version: ${{ env.KSU_VERSION }}
-          kernelsu_commit: ${{ env.KSU_COMMIT }}
-          susfs_commit: ${{ env.SUSFS_COMMIT }}
-          use_zram: ${{ env.USE_ZRAM }}
-          use_kpm: ${{ env.USE_KPM }}
-          BBG: ${{ env.USE_BBG }}
-          make_release: false
+          remove-dotnet: 'true'
+          remove-android: 'true'
+          remove-haskell: 'true'
+          remove-codeql: 'true'
+          remove-docker-images: 'true'
+          remove-large-packages: 'true'
+          remove-swapfile: 'true'
+          verbose: 'true'
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          sudo apt update && sudo apt upgrade -y
+          sudo apt install -y ccache python3 git curl wget zip unzip
+          pip install PyYAML
+
+      - name: Configure ccache
+        run: |
+          mkdir -p ~/.cache/bazel
+          ccache --version
+          ccache --max-size=2G
+          ccache --set-config=compression=true
+          echo "CCACHE_DIR=$HOME/.ccache" >> $GITHUB_ENV
+
+      - name: Build Android 14 6.1
+        run: |
+          cd ./.github/workflows
+          ARGS="--android android14 --kernel 6.1 --sub-level ${{ matrix.sub_level }} --os-patch ${{ matrix.os_patch_level }} --ksu-version ${{ env.KSU_VERSION }} --no-release"
+          [ "${{ env.USE_ZRAM }}" = "false" ] && ARGS="$ARGS --no-zram"
+          [ "${{ env.USE_KPM }}" = "false" ] && ARGS="$ARGS --no-kpm"
+          [ "${{ env.USE_BBG }}" = "true" ] && ARGS="$ARGS --bbg"
+          [ -n "${{ env.KSU_COMMIT }}" ] && ARGS="$ARGS --ksu-commit ${{ env.KSU_COMMIT }}"
+          [ -n "${{ env.SUSFS_COMMIT }}" ] && ARGS="$ARGS --susfs-commit ${{ env.SUSFS_COMMIT }}"
+          python3 build.py $ARGS
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel-android14-6-1-${{ matrix.sub_level }}
+          path: |
+            *.zip
+            *.img
 
   build-android15-6-6:
     runs-on: ubuntu-latest
@@ -215,25 +401,63 @@ jobs:
           - sub_level: "102"
             os_patch_level: "2025-10"
     steps:
-      - name: Build Android 15 6.6 (${{ matrix.os_patch_level }})
-        uses: ./.github/workflows/build-kernel.yml
+      - name: Maximize build space
+        uses: AdityaGarg8/remove-unwanted-software@v5
         with:
-          android_version: android15
-          kernel_version: "6.6"
-          sub_level: ${{ matrix.sub_level }}
-          os_patch_level: ${{ matrix.os_patch_level }}
-          kernelsu_version: ${{ env.KSU_VERSION }}
-          kernelsu_commit: ${{ env.KSU_COMMIT }}
-          susfs_commit: ${{ env.SUSFS_COMMIT }}
-          use_zram: ${{ env.USE_ZRAM }}
-          use_kpm: ${{ env.USE_KPM }}
-          BBG: ${{ env.USE_BBG }}
-          make_release: false
+          remove-dotnet: 'true'
+          remove-android: 'true'
+          remove-haskell: 'true'
+          remove-codeql: 'true'
+          remove-docker-images: 'true'
+          remove-large-packages: 'true'
+          remove-swapfile: 'true'
+          verbose: 'true'
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          sudo apt update && sudo apt upgrade -y
+          sudo apt install -y ccache python3 git curl wget zip unzip
+          pip install PyYAML
+
+      - name: Configure ccache
+        run: |
+          mkdir -p ~/.cache/bazel
+          ccache --version
+          ccache --max-size=2G
+          ccache --set-config=compression=true
+          echo "CCACHE_DIR=$HOME/.ccache" >> $GITHUB_ENV
+
+      - name: Build Android 15 6.6
+        run: |
+          cd ./.github/workflows
+          ARGS="--android android15 --kernel 6.6 --sub-level ${{ matrix.sub_level }} --os-patch ${{ matrix.os_patch_level }} --ksu-version ${{ env.KSU_VERSION }} --no-release"
+          [ "${{ env.USE_ZRAM }}" = "false" ] && ARGS="$ARGS --no-zram"
+          [ "${{ env.USE_KPM }}" = "false" ] && ARGS="$ARGS --no-kpm"
+          [ "${{ env.USE_BBG }}" = "true" ] && ARGS="$ARGS --bbg"
+          [ -n "${{ env.KSU_COMMIT }}" ] && ARGS="$ARGS --ksu-commit ${{ env.KSU_COMMIT }}"
+          [ -n "${{ env.SUSFS_COMMIT }}" ] && ARGS="$ARGS --susfs-commit ${{ env.SUSFS_COMMIT }}"
+          python3 build.py $ARGS
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel-android15-6-6-${{ matrix.sub_level }}
+          path: |
+            *.zip
+            *.img
 
   release:
     needs: [build-android12-5-10, build-android13-5-10, build-android13-5-15, build-android14-5-15, build-android14-6-1, build-android15-6-6]
-    runs-on: ubuntu-latest
     if: ${{ github.event.inputs.make_release == 'true' }}
+    runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
@@ -251,7 +475,6 @@ jobs:
         run: |
           echo "=== Creating checksums ==="
           sha256sum * > SHA256SUMS.txt
-          cat SHA256SUMS.txt
 
       - name: Get SukiSU info
         run: |

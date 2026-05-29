@@ -85,12 +85,71 @@ on:
         required: false
         type: string
         default: ''
+  workflow_call:
+    inputs:
+      android_version:
+        required: true
+        type: string
+      kernel_version:
+        required: true
+        type: string
+      sub_level:
+        required: true
+        type: string
+      os_patch_level:
+        required: true
+        type: string
+      kernelsu_version:
+        required: true
+        type: string
+      kernelsu_commit:
+        required: false
+        type: string
+        default: ''
+      susfs_commit:
+        required: false
+        type: string
+        default: ''
+      use_zram:
+        required: false
+        type: boolean
+        default: true
+      use_kpm:
+        required: false
+        type: boolean
+        default: true
+      BBG:
+        required: false
+        type: boolean
+        default: false
+      supp_op:
+        required: false
+        type: boolean
+        default: false
+      set_defbbr:
+        required: false
+        type: boolean
+        default: false
+      make_release:
+        required: false
+        type: boolean
+        default: false
+      custom_version:
+        required: false
+        type: string
+        default: ''
+      revision:
+        required: false
+        type: string
+        default: ''
 
 env:
   PYTHON_VERSION: '3.10'
 
 jobs:
+  # workflow_dispatch 时: 生成配置矩阵
   prepare:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     outputs:
       build_configs: ${{ steps.generate-configs.outputs.configs }}
@@ -104,62 +163,24 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install dependencies
-        run: |
-          pip install PyYAML
+        run: pip install PyYAML
 
       - name: Generate build configs
         id: generate-configs
         run: |
           python3 << 'EOF'
           import json
-          import sys
           
-          # 默认配置矩阵
-          matrix = {
-              "android12-5.10": [
-                  {"sub_level": "136", "os_patch_level": "2022-11", "revision": "r15"},
-                  {"sub_level": "198", "os_patch_level": "2024-01", "revision": "r17"},
-                  {"sub_level": "209", "os_patch_level": "2024-05", "revision": "r13"},
-                  {"sub_level": "236", "os_patch_level": "2025-05", "revision": "r1"},
-                  {"sub_level": "X", "os_patch_level": "lts", "revision": "r1"},
-              ],
-              "android13-5.10": [
-                  {"sub_level": "X", "os_patch_level": "lts"},
-              ],
-              "android13-5.15": [
-                  {"sub_level": "74", "os_patch_level": "2023-01"},
-                  {"sub_level": "123", "os_patch_level": "2023-11"},
-                  {"sub_level": "148", "os_patch_level": "2024-05"},
-                  {"sub_level": "170", "os_patch_level": "2025-01"},
-                  {"sub_level": "178", "os_patch_level": "2025-03"},
-                  {"sub_level": "180", "os_patch_level": "2025-05"},
-                  {"sub_level": "189", "os_patch_level": "2025-09"},
-              ],
-              "android14-5.15": [
-                  {"sub_level": "X", "os_patch_level": "lts"},
-              ],
-              "android14-6.1": [
-                  {"sub_level": "78", "os_patch_level": "2024-06"},
-                  {"sub_level": "90", "os_patch_level": "2024-08"},
-                  {"sub_level": "99", "os_patch_level": "2024-10"},
-                  {"sub_level": "124", "os_patch_level": "2025-02"},
-                  {"sub_level": "145", "os_patch_level": "2025-09"},
-              ],
-              "android15-6.6": [
-                  {"sub_level": "50", "os_patch_level": "2024-10"},
-                  {"sub_level": "66", "os_patch_level": "2025-02"},
-                  {"sub_level": "102", "os_patch_level": "2025-10"},
-              ],
-          }
+          # 从 JSON 文件加载矩阵
+          with open('.github/workflows/matrix.json', 'r') as f:
+              matrix = json.load(f)
           
           av = "${{ github.event.inputs.android_version }}"
           kv = "${{ github.event.inputs.kernel_version }}"
           key = f"{av}-{kv}"
           
-          # 获取指定的 sub levels
           specified = "${{ github.event.inputs.kernels_to_build }}"
           if specified:
-              # 解析用户指定的 sub levels
               selected = []
               for sl in specified.split(","):
                   sl = sl.strip()
@@ -174,151 +195,69 @@ jobs:
           print(f"::set-output name=configs::{json.dumps(configs)}")
           EOF
 
-  build:
+  # workflow_dispatch 时: 使用矩阵构建
+  build-matrix:
     needs: prepare
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         config: ${{ fromJson(needs.prepare.outputs.build_configs) }}
-    env:
-      ANDROID_VERSION: ${{ github.event.inputs.android_version }}
-      KERNEL_VERSION: ${{ github.event.inputs.kernel_version }}
-      KSU_VERSION: ${{ github.event.inputs.kernelsu_version }}
-      KSU_COMMIT: ${{ github.event.inputs.kernelsu_commit }}
-      SUSFS_COMMIT: ${{ github.event.inputs.susfs_commit }}
-      USE_ZRAM: ${{ github.event.inputs.use_zram }}
-      USE_KPM: ${{ github.event.inputs.use_kpm }}
-      USE_BBG: ${{ github.event.inputs.BBG }}
-      SUPPORT_OP8E: ${{ github.event.inputs.supp_op }}
-      SET_DEFAULT_BBR: ${{ github.event.inputs.set_defbbr }}
-      MAKE_RELEASE: ${{ github.event.inputs.make_release }}
-      CUSTOM_VERSION: ${{ github.event.inputs.custom_version }}
-      SUB_LEVEL: ${{ matrix.config.sub_level }}
-      OS_PATCH_LEVEL: ${{ matrix.config.os_patch_level }}
-      REVISION: ${{ matrix.config.revision || '' }}
+    uses: ./.github/workflows/build-single.yml
+    with:
+      android_version: ${{ github.event.inputs.android_version }}
+      kernel_version: ${{ github.event.inputs.kernel_version }}
+      sub_level: ${{ matrix.config.sub_level }}
+      os_patch_level: ${{ matrix.config.os_patch_level }}
+      kernelsu_version: ${{ github.event.inputs.kernelsu_version }}
+      kernelsu_commit: ${{ github.event.inputs.kernelsu_commit }}
+      susfs_commit: ${{ github.event.inputs.susfs_commit }}
+      use_zram: ${{ github.event.inputs.use_zram }}
+      use_kpm: ${{ github.event.inputs.use_kpm }}
+      BBG: ${{ github.event.inputs.BBG }}
+      supp_op: ${{ github.event.inputs.supp_op }}
+      set_defbbr: ${{ github.event.inputs.set_defbbr }}
+      make_release: false
+      custom_version: ${{ github.event.inputs.custom_version }}
+      revision: ${{ matrix.config.revision }}
 
-    steps:
-      - name: Maximize build space
-        uses: AdityaGarg8/remove-unwanted-software@v5
-        with:
-          remove-dotnet: 'true'
-          remove-android: 'true'
-          remove-haskell: 'true'
-          remove-codeql: 'true'
-          remove-docker-images: 'true'
-          remove-large-packages: 'true'
-          remove-swapfile: 'true'
-          verbose: 'true'
-
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Install dependencies
-        run: |
-          sudo apt update && sudo apt upgrade -y
-          sudo apt install -y ccache python3 git curl wget zip unzip
-          pip install PyYAML
-
-      - name: Clone build system
-        run: |
-          cp -r ./.github/build-system ./build-system
-
-      - name: Configure ccache
-        run: |
-          mkdir -p ~/.cache/bazel
-          ccache --version
-          ccache --max-size=2G
-          ccache --set-config=compression=true
-          echo "CCACHE_DIR=$HOME/.ccache" >> $GITHUB_ENV
-
-      - name: Restore ccache
-        uses: actions/cache@v4
-        with:
-          path: ~/.ccache
-          key: ${{ env.ANDROID_VERSION }}-${{ env.KERNEL_VERSION }}-${{ env.SUB_LEVEL }}-ccache-${{ github.sha }}
-          restore-keys: |
-            ${{ env.ANDROID_VERSION }}-${{ env.KERNEL_VERSION }}-${{ env.SUB_LEVEL }}-ccache-
-
-      - name: Run build
-        run: |
-          cd ./build-system
-          
-          # 构建命令
-          ARGS="--android ${{ env.ANDROID_VERSION }}"
-          ARGS="$ARGS --kernel ${{ env.KERNEL_VERSION }}"
-          ARGS="$ARGS --sub-level ${{ env.SUB_LEVEL }}"
-          ARGS="$ARGS --os-patch ${{ env.OS_PATCH_LEVEL }}"
-          ARGS="$ARGS --ksu-version ${{ env.KSU_VERSION }}"
-          ARGS="$ARGS --no-release"
-          
-          # 可选参数
-          if [ "${{ env.USE_ZRAM }}" = "false" ]; then
-            ARGS="$ARGS --no-zram"
-          fi
-          if [ "${{ env.USE_KPM }}" = "false" ]; then
-            ARGS="$ARGS --no-kpm"
-          fi
-          if [ "${{ env.USE_BBG }}" = "true" ]; then
-            ARGS="$ARGS --bbg"
-          fi
-          if [ "${{ env.SUPPORT_OP8E }}" = "true" ]; then
-            ARGS="$ARGS --op8e"
-          fi
-          if [ "${{ env.SET_DEFAULT_BBR }}" = "true" ]; then
-            ARGS="$ARGS --bbr"
-          fi
-          if [ -n "${{ env.KSU_COMMIT }}" ]; then
-            ARGS="$ARGS --ksu-commit ${{ env.KSU_COMMIT }}"
-          fi
-          if [ -n "${{ env.SUSFS_COMMIT }}" ]; then
-            ARGS="$ARGS --susfs-commit ${{ env.SUSFS_COMMIT }}"
-          fi
-          if [ -n "${{ env.CUSTOM_VERSION }}" ]; then
-            ARGS="$ARGS --version ${{ env.CUSTOM_VERSION }}"
-          fi
-          
-          echo "Build command: python3 build.py $ARGS"
-          python3 build.py $ARGS
-
-      - name: Prepare artifacts
-        run: |
-          CONFIG="${{ env.ANDROID_VERSION }}-${{ env.KERNEL_VERSION }}-${{ env.SUB_LEVEL }}"
-          mkdir -p artifacts
-          
-          # 查找并复制产物
-          find . -name "*.zip" -type f -exec cp {} artifacts/ \;
-          find . -name "*.img" -type f -exec cp {} artifacts/ \;
-          
-          echo "=== Artifacts ==="
-          ls -la artifacts/
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: kernel-${{ env.ANDROID_VERSION }}-${{ env.KERNEL_VERSION }}-${{ env.SUB_LEVEL }}
-          path: artifacts/*
+  # workflow_call 时: 直接构建单个配置
+  build-single:
+    if: github.event_name == 'workflow_call'
+    runs-on: ubuntu-latest
+    uses: ./.github/workflows/build-single.yml
+    with:
+      android_version: ${{ inputs.android_version }}
+      kernel_version: ${{ inputs.kernel_version }}
+      sub_level: ${{ inputs.sub_level }}
+      os_patch_level: ${{ inputs.os_patch_level }}
+      kernelsu_version: ${{ inputs.kernelsu_version }}
+      kernelsu_commit: ${{ inputs.kernelsu_commit }}
+      susfs_commit: ${{ inputs.susfs_commit }}
+      use_zram: ${{ inputs.use_zram }}
+      use_kpm: ${{ inputs.use_kpm }}
+      BBG: ${{ inputs.BBG }}
+      supp_op: ${{ inputs.supp_op }}
+      set_defbbr: ${{ inputs.set_defbbr }}
+      make_release: ${{ inputs.make_release }}
+      custom_version: ${{ inputs.custom_version }}
+      revision: ${{ inputs.revision }}
 
   release:
-    needs: build
+    needs: build-matrix
+    if: ${{ github.event.inputs.make_release == 'true' && github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
-    if: ${{ github.event.inputs.make_release == 'true' }}
     permissions:
       contents: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Download artifacts
+      - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: all-artifacts
-          pattern: kernel-*
+          pattern: '*_kernel-*'
           merge-multiple: true
 
       - name: Generate checksums
@@ -327,16 +266,13 @@ jobs:
           sha256sum * > SHA256SUMS.txt
           cat SHA256SUMS.txt
 
-      - name: Generate release name
+      - name: Get SukiSU info
         run: |
-          KSU_VER=$(git ls-remote --tags https://github.com/SukiSU-Ultra/SukiSU-Ultra.git | grep -o 'refs/tags/.*' | cut -d'/' -f3 | head -n1 || echo "latest")
-          echo "RELEASE_NAME=GKI Kernel: SukiSU ($KSU_VER) & SUSFS v2.1.0" >> $GITHUB_ENV
-          echo "KSU_TAG=$KSU_VER" >> $GITHUB_ENV
-
-      - name: Get commit info
-        run: |
+          KSU_TAG=$(git ls-remote --tags https://github.com/SukiSU-Ultra/SukiSU-Ultra.git | grep -o 'refs/tags/.*' | cut -d'/' -f3 | head -n1 || echo "latest")
           KSU_COMMIT=$(git ls-remote https://github.com/SukiSU-Ultra/SukiSU-Ultra.git refs/heads/main | awk '{ print $1 }' | cut -c1-7)
+          echo "KSU_TAG=$KSU_TAG" >> $GITHUB_ENV
           echo "KSU_COMMIT=$KSU_COMMIT" >> $GITHUB_ENV
+          echo "RELEASE_NAME=GKI Kernel: SukiSU ($KSU_TAG) & SUSFS v2.1.0" >> $GITHUB_ENV
 
       - name: Create release
         uses: softprops/action-gh-release@v2
@@ -351,9 +287,15 @@ jobs:
           body: |
             ## GKI Kernel with SukiSU & SUSFS v2.1.0
 
-            ### KernelSU
+            ### SukiSU Info
+            - Tag: `${{ env.KSU_TAG }}`
             - Commit: `${{ env.KSU_COMMIT }}`
-            - Tag: ${{ env.KSU_TAG }}
+
+            ### Supported Configurations
+            - Android 12 (Kernel 5.10)
+            - Android 13 (Kernel 5.10, 5.15)
+            - Android 14 (Kernel 5.15, 6.1)
+            - Android 15 (Kernel 6.6)
 
             ### Features
             - SUSFS v2.1.0
@@ -361,9 +303,3 @@ jobs:
             - Magic Mount Support
             - BBR Support
             - LZ4KD Support
-
-            ### Build Info
-            - Android: ${{ github.event.inputs.android_version }}
-            - Kernel: ${{ github.event.inputs.kernel_version }}
-            - ZRAM: ${{ github.event.inputs.use_zram }}
-            - KPM: ${{ github.event.inputs.use_kpm }}

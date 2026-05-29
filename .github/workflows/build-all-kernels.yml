@@ -57,7 +57,7 @@ env:
   MAKE_RELEASE: ${{ github.event.inputs.make_release }}
 
 jobs:
-  build-android12-5.10:
+  build-android12-5-10:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -98,7 +98,7 @@ jobs:
           BBG: ${{ env.USE_BBG }}
           make_release: false
 
-  build-android13-5.10:
+  build-android13-5-10:
     runs-on: ubuntu-latest
     steps:
       - name: Build Android 13 5.10 LTS
@@ -116,7 +116,7 @@ jobs:
           BBG: ${{ env.USE_BBG }}
           make_release: false
 
-  build-android13-5.15:
+  build-android13-5-15:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -152,7 +152,7 @@ jobs:
           BBG: ${{ env.USE_BBG }}
           make_release: false
 
-  build-android14-5.15:
+  build-android14-5-15:
     runs-on: ubuntu-latest
     steps:
       - name: Build Android 14 5.15 LTS
@@ -170,7 +170,7 @@ jobs:
           BBG: ${{ env.USE_BBG }}
           make_release: false
 
-  build-android14-6.1:
+  build-android14-6-1:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -202,7 +202,7 @@ jobs:
           BBG: ${{ env.USE_BBG }}
           make_release: false
 
-  build-android15-6.6:
+  build-android15-6-6:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -231,7 +231,7 @@ jobs:
           make_release: false
 
   release:
-    needs: [build-android12-5.10, build-android13-5.10, build-android13-5.15, build-android14-5.15, build-android14-6.1, build-android15-6.6]
+    needs: [build-android12-5-10, build-android13-5-10, build-android13-5-15, build-android14-5-15, build-android14-6-1, build-android15-6-6]
     runs-on: ubuntu-latest
     if: ${{ github.event.inputs.make_release == 'true' }}
     permissions:

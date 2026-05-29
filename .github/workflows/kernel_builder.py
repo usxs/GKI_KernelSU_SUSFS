@@ -343,58 +343,78 @@ CONFIG_ZRAM_WRITEBACK=y
         )
         
         # 检查是否为 deprecated 分支
-        remote_branch = subprocess.run(
+        remote_branch_result = subprocess.run(
             f"git ls-remote https://android.googlesource.com/kernel/common {formatted_branch}",
             shell=True, capture_output=True, text=True
-        ).stdout.strip()
+        )
+        remote_branch = remote_branch_result.stdout.strip()
         
         if "deprecated" in remote_branch:
             logger.info("检测到 deprecated 分支，修改 manifest...")
             manifest_path = self.work_dir / ".repo/manifests/default.xml"
             subprocess.run(
-                f"sed -i 's/\"{formatted_branch}\"/\"deprecated/{formatted_branch}\"/g' {manifest_path}",
+                f"sed -i 's/\"{formatted_branch}\"/\"deprecated\\/{formatted_branch}\"/g' {manifest_path}",
                 shell=True, check=False
             )
         
+        # 保存 REMOTE_BRANCH 到环境变量
+        self.env["REMOTE_BRANCH"] = remote_branch
+        
         # 同步
         logger.info("同步内核源代码...")
-        self._run_cmd(
-            f"$REPO --trace sync -c -j$(nproc --all) --no-tags --fail-fast",
-            check=False
-        )
+        self._run_cmd("$REPO --trace sync -c -j$(nproc --all) --no-tags --fail-fast", check=False)
+        
+        # 检查 common 目录是否存在
+        common_dir = self.work_dir / "common"
+        if not common_dir.exists():
+            logger.error("repo sync 失败，common 目录不存在")
+            raise RuntimeError(
+                f"repo sync 失败！\n"
+                "可能原因: 网络问题或仓库不可用\n"
+                "请重试构建"
+            )
         
         # 旧版内核兼容修复
-        self._apply_legacy_fixes()
+        self._apply_legacy_fixes(remote_branch)
         
         logger.info("=== 内核源代码同步完成 ===")
     
-    def _apply_legacy_fixes(self) -> None:
+    def _apply_legacy_fixes(self, remote_branch: str = "") -> None:
         """应用旧版内核兼容补丁"""
         av = self.config.android_version
         kv = self.config.kernel_version
         sub_level = self.config.get_sub_level_int()
         
-        common_dir = self.work_dir / "common"
-        if not common_dir.exists():
-            return
+        # 检查是否为 deprecated 分支
+        is_deprecated = "deprecated" in remote_branch
         
-        os.chdir(common_dir)
-        
-        # android13-5.15 below 123
-        if av == "android13" and kv == "5.15" and sub_level and sub_level < 123:
-            logger.info("应用 android13-5.15 旧版 C 库修复补丁...")
+        # android13-5.15 below 123 需要特殊修复
+        if is_deprecated and av == "android13" and kv == "5.15" and sub_level and sub_level < 123:
+            logger.info("修复 5.15 仅支持旧版 C 库的 BUG")
+            common_dir = self.work_dir / "common"
+            os.chdir(common_dir)
+            
+            patch_url = LEGACY_FIXES['android13-5.15-below-123']['url']
             self._run_cmd(
-                f"curl -LSs {LEGACY_FIXES['android13-5.15-below-123']['url']} | patch -p1",
+                f"curl -LSs {patch_url} -o fix_5.15.legacy.patch && patch -p1 < fix_5.15.legacy.patch",
                 check=False
             )
+            
+            os.chdir(self.work_dir)
         
-        # android12-5.10 below 136
+        # android12-5.10 below 136 需要 fdinfo 修复
         if av == "android12" and kv == "5.10" and sub_level and sub_level < 136:
             logger.info("应用 android12-5.10 fdinfo 修复补丁...")
+            common_dir = self.work_dir / "common"
+            os.chdir(common_dir)
+            
+            patch_url = LEGACY_FIXES['android12-5.10-below-136']['url']
             self._run_cmd(
-                f"curl -LSs {LEGACY_FIXES['android12-5.10-below-136']['url']} | patch -p1",
+                f"curl -LSs {patch_url} | patch -p1",
                 check=False
             )
+            
+            os.chdir(self.work_dir)
     
     def add_kernel_supatch(self) -> None:
         """添加 OnePlus 8E 支持补丁"""

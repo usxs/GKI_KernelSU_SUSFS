@@ -112,7 +112,7 @@ class BuildConfig:
     susfs_commit: Optional[str] = None  # 支持指定 commit hash
     
     # 可选功能开关
-    use_zram: bool = True
+    use_zram: bool = False
     use_kpm: bool = True
     use_bbg: bool = False
     support_op8e: bool = False

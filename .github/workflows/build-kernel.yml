@@ -54,7 +54,7 @@ on:
         description: '启用 ZRAM (LZ4KD)'
         required: true
         type: boolean
-        default: true
+        default: false
       use_kpm:
         description: '启用 KPM'
         required: true
@@ -197,7 +197,7 @@ jobs:
           ARGS="$ARGS --ksu-version ${{ github.event.inputs.kernelsu_version }}"
           ARGS="$ARGS --no-release"
           
-          [ "${{ github.event.inputs.use_zram }}" = "false" ] && ARGS="$ARGS --no-zram"
+          [ "${{ github.event.inputs.use_zram }}" = "true" ] && ARGS="$ARGS --zram"
           [ "${{ github.event.inputs.use_kpm }}" = "false" ] && ARGS="$ARGS --no-kpm"
           [ "${{ github.event.inputs.BBG }}" = "true" ] && ARGS="$ARGS --bbg"
           [ "${{ github.event.inputs.supp_op }}" = "true" ] && ARGS="$ARGS --op8e"

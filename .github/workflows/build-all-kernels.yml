@@ -29,7 +29,7 @@ on:
         description: '启用 ZRAM (LZ4KD)'
         required: true
         type: boolean
-        default: true
+        default: false
       use_kpm:
         description: '启用 KPM'
         required: true
@@ -45,6 +45,11 @@ on:
         required: true
         type: boolean
         default: true
+      custom_version:
+        description: '自定义版本名称 (可选)'
+        required: false
+        type: string
+        default: ''
 
 env:
   PYTHON_VERSION: '3.10'
@@ -55,6 +60,7 @@ env:
   USE_KPM: ${{ github.event.inputs.use_kpm }}
   USE_BBG: ${{ github.event.inputs.BBG }}
   MAKE_RELEASE: ${{ github.event.inputs.make_release }}
+  CUSTOM_VERSION: ${{ github.event.inputs.custom_version }}
 
 jobs:
   build-android12-5-10:
@@ -117,7 +123,8 @@ jobs:
         run: |
           cd ./.github/workflows
           ARGS="--android android12 --kernel 5.10 --sub-level ${{ matrix.sub_level }} --os-patch ${{ matrix.os_patch_level }} --ksu-version ${{ env.KSU_VERSION }} --no-release"
-          [ "${{ env.USE_ZRAM }}" = "false" ] && ARGS="$ARGS --no-zram"
+          [ -n "${{ env.CUSTOM_VERSION }}" ] && ARGS="$ARGS --version ${{ env.CUSTOM_VERSION }}"
+          [ "${{ env.USE_ZRAM }}" = "true" ] && ARGS="$ARGS --zram"
           [ "${{ env.USE_KPM }}" = "false" ] && ARGS="$ARGS --no-kpm"
           [ "${{ env.USE_BBG }}" = "true" ] && ARGS="$ARGS --bbg"
           [ -n "${{ env.KSU_COMMIT }}" ] && ARGS="$ARGS --ksu-commit ${{ env.KSU_COMMIT }}"
@@ -173,7 +180,8 @@ jobs:
         run: |
           cd ./.github/workflows
           ARGS="--android android13 --kernel 5.10 --sub-level X --os-patch lts --ksu-version ${{ env.KSU_VERSION }} --no-release"
-          [ "${{ env.USE_ZRAM }}" = "false" ] && ARGS="$ARGS --no-zram"
+          [ -n "${{ env.CUSTOM_VERSION }}" ] && ARGS="$ARGS --version ${{ env.CUSTOM_VERSION }}"
+          [ "${{ env.USE_ZRAM }}" = "true" ] && ARGS="$ARGS --zram"
           [ "${{ env.USE_KPM }}" = "false" ] && ARGS="$ARGS --no-kpm"
           [ "${{ env.USE_BBG }}" = "true" ] && ARGS="$ARGS --bbg"
           [ -n "${{ env.KSU_COMMIT }}" ] && ARGS="$ARGS --ksu-commit ${{ env.KSU_COMMIT }}"
@@ -247,7 +255,8 @@ jobs:
         run: |
           cd ./.github/workflows
           ARGS="--android android13 --kernel 5.15 --sub-level ${{ matrix.sub_level }} --os-patch ${{ matrix.os_patch_level }} --ksu-version ${{ env.KSU_VERSION }} --no-release"
-          [ "${{ env.USE_ZRAM }}" = "false" ] && ARGS="$ARGS --no-zram"
+          [ -n "${{ env.CUSTOM_VERSION }}" ] && ARGS="$ARGS --version ${{ env.CUSTOM_VERSION }}"
+          [ "${{ env.USE_ZRAM }}" = "true" ] && ARGS="$ARGS --zram"
           [ "${{ env.USE_KPM }}" = "false" ] && ARGS="$ARGS --no-kpm"
           [ "${{ env.USE_BBG }}" = "true" ] && ARGS="$ARGS --bbg"
           [ -n "${{ env.KSU_COMMIT }}" ] && ARGS="$ARGS --ksu-commit ${{ env.KSU_COMMIT }}"
@@ -303,7 +312,8 @@ jobs:
         run: |
           cd ./.github/workflows
           ARGS="--android android14 --kernel 5.15 --sub-level X --os-patch lts --ksu-version ${{ env.KSU_VERSION }} --no-release"
-          [ "${{ env.USE_ZRAM }}" = "false" ] && ARGS="$ARGS --no-zram"
+          [ -n "${{ env.CUSTOM_VERSION }}" ] && ARGS="$ARGS --version ${{ env.CUSTOM_VERSION }}"
+          [ "${{ env.USE_ZRAM }}" = "true" ] && ARGS="$ARGS --zram"
           [ "${{ env.USE_KPM }}" = "false" ] && ARGS="$ARGS --no-kpm"
           [ "${{ env.USE_BBG }}" = "true" ] && ARGS="$ARGS --bbg"
           [ -n "${{ env.KSU_COMMIT }}" ] && ARGS="$ARGS --ksu-commit ${{ env.KSU_COMMIT }}"
@@ -373,7 +383,8 @@ jobs:
         run: |
           cd ./.github/workflows
           ARGS="--android android14 --kernel 6.1 --sub-level ${{ matrix.sub_level }} --os-patch ${{ matrix.os_patch_level }} --ksu-version ${{ env.KSU_VERSION }} --no-release"
-          [ "${{ env.USE_ZRAM }}" = "false" ] && ARGS="$ARGS --no-zram"
+          [ -n "${{ env.CUSTOM_VERSION }}" ] && ARGS="$ARGS --version ${{ env.CUSTOM_VERSION }}"
+          [ "${{ env.USE_ZRAM }}" = "true" ] && ARGS="$ARGS --zram"
           [ "${{ env.USE_KPM }}" = "false" ] && ARGS="$ARGS --no-kpm"
           [ "${{ env.USE_BBG }}" = "true" ] && ARGS="$ARGS --bbg"
           [ -n "${{ env.KSU_COMMIT }}" ] && ARGS="$ARGS --ksu-commit ${{ env.KSU_COMMIT }}"
@@ -439,7 +450,8 @@ jobs:
         run: |
           cd ./.github/workflows
           ARGS="--android android15 --kernel 6.6 --sub-level ${{ matrix.sub_level }} --os-patch ${{ matrix.os_patch_level }} --ksu-version ${{ env.KSU_VERSION }} --no-release"
-          [ "${{ env.USE_ZRAM }}" = "false" ] && ARGS="$ARGS --no-zram"
+          [ -n "${{ env.CUSTOM_VERSION }}" ] && ARGS="$ARGS --version ${{ env.CUSTOM_VERSION }}"
+          [ "${{ env.USE_ZRAM }}" = "true" ] && ARGS="$ARGS --zram"
           [ "${{ env.USE_KPM }}" = "false" ] && ARGS="$ARGS --no-kpm"
           [ "${{ env.USE_BBG }}" = "true" ] && ARGS="$ARGS --bbg"
           [ -n "${{ env.KSU_COMMIT }}" ] && ARGS="$ARGS --ksu-commit ${{ env.KSU_COMMIT }}"

@@ -141,9 +141,9 @@ def parse_args() -> argparse.Namespace:
     
     # 功能开关
     parser.add_argument(
-        "--no-zram",
+        "--zram",
         action="store_true",
-        help="禁用 ZRAM (LZ4KD)"
+        help="启用 ZRAM (LZ4KD)"
     )
     parser.add_argument(
         "--no-kpm",
@@ -257,6 +257,8 @@ def load_from_env() -> dict:
     # 布尔值
     if os.environ.get("USE_ZRAM", "").lower() in ("false", "0", "no"):
         config["use_zram"] = False
+    elif os.environ.get("USE_ZRAM", "").lower() in ("true", "1", "yes"):
+        config["use_zram"] = True
     if os.environ.get("USE_KPM", "").lower() in ("false", "0", "no"):
         config["use_kpm"] = False
     if os.environ.get("USE_BBG", "").lower() in ("true", "1", "yes"):
@@ -282,7 +284,7 @@ def create_build_config(args: argparse.Namespace) -> BuildConfig:
         "kernelsu_version": args.ksu_version,
         "kernelsu_commit": args.ksu_commit or env_config.get("kernelsu_commit"),
         "susfs_commit": args.susfs_commit or env_config.get("susfs_commit"),
-        "use_zram": not args.no_zram,
+        "use_zram": args.zram,
         "use_kpm": not args.no_kpm,
         "use_bbg": args.bbg,
         "support_op8e": args.op8e,
@@ -386,7 +388,7 @@ def build_matrix(matrix_key: str, args: argparse.Namespace, workspace: str) -> L
                 os_patch_level=cfg_data["os_patch_level"],
                 kernelsu_version=args.ksu_version,
                 kernelsu_commit=args.ksu_commit,
-                use_zram=not args.no_zram,
+                use_zram=args.zram,
                 use_kpm=not args.no_kpm,
                 use_bbg=args.bbg,
                 support_op8e=args.op8e,

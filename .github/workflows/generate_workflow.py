@@ -34,7 +34,7 @@ on:
         description: '启用 ZRAM (LZ4KD)'
         required: true
         type: boolean
-        default: true
+        default: false
       use_kpm:
         description: '启用 KPM'
         required: true
@@ -50,6 +50,11 @@ on:
         required: true
         type: boolean
         default: true
+      custom_version:
+        description: '自定义版本名称 (可选)'
+        required: false
+        type: string
+        default: ''
 
 env:
   PYTHON_VERSION: '3.10'
@@ -60,6 +65,7 @@ env:
   USE_KPM: ${{ github.event.inputs.use_kpm }}
   USE_BBG: ${{ github.event.inputs.BBG }}
   MAKE_RELEASE: ${{ github.event.inputs.make_release }}
+  CUSTOM_VERSION: ${{ github.event.inputs.custom_version }}
 
 jobs:
 {matrix_jobs}
@@ -171,11 +177,12 @@ JOB_TEMPLATE = """  {job_id}:
         run: |
           cd ./.github/workflows
           ARGS="--android {android} --kernel {kernel} --sub-level ${{ matrix.sub_level }} --os-patch ${{ matrix.os_patch_level }} --ksu-version ${{ env.KSU_VERSION }} --no-release"
-          [ "${{ env.USE_ZRAM }}" = "false" ] && ARGS="$ARGS --no-zram"
+          [ "${{ env.USE_ZRAM }}" = "true" ] && ARGS="$ARGS --zram"
           [ "${{ env.USE_KPM }}" = "false" ] && ARGS="$ARGS --no-kpm"
           [ "${{ env.USE_BBG }}" = "true" ] && ARGS="$ARGS --bbg"
           [ -n "${{ env.KSU_COMMIT }}" ] && ARGS="$ARGS --ksu-commit ${{ env.KSU_COMMIT }}"
           [ -n "${{ env.SUSFS_COMMIT }}" ] && ARGS="$ARGS --susfs-commit ${{ env.SUSFS_COMMIT }}"
+          [ -n "${{ env.CUSTOM_VERSION }}" ] && ARGS="$ARGS --version ${{ env.CUSTOM_VERSION }}"
           python3 build.py $ARGS
 
       - name: Upload artifacts

@@ -760,9 +760,10 @@ CONFIG_ZRAM_WRITEBACK=y
     def configure_kernel_name(self) -> None:
         """配置内核名称"""
         logger.info("=== 配置内核名称 ===")
-        
+
+        # 先进入配置目录
         self._chdir(self.work_dir)
-        
+
         # 配置版本号
         setlocalversion = self.work_dir / "common/scripts/setlocalversion"
         if setlocalversion.exists():
@@ -776,16 +777,17 @@ CONFIG_ZRAM_WRITEBACK=y
                     r"sed -i '$s|echo \"\$res\"|echo \"\$res-zakozakoooooo-1145141919\"|' common/scripts/setlocalversion",
                     shell=True, check=False
                 )
-        
+
         # 配置构建时间
         import datetime
         current_time = datetime.datetime.utcnow().strftime("%a %b %d %H:%M:%S UTC %Y")
-        
+        logger.info(f"构建时间: {current_time}")
+
         mkcompile_h = self.work_dir / "common/scripts/mkcompile_h"
         if mkcompile_h.exists():
             perl_cmd = rf'''perl -pi -e 's{{UTS_VERSION="\\\$(echo \\\$UTS_VERSION \\\$CONFIG_FLAGS \\\$TIMESTAMP | cut -b -\\\$UTS_LEN)"}}{{UTS_VERSION="#1 SMP PREEMPT {current_time}"}}' common/scripts/mkcompile_h'''
             subprocess.run(perl_cmd, shell=True, check=False)
-        
+
         # 6.1 和 6.6 内核额外配置
         if self.config.kernel_version in ["6.1", "6.6"]:
             init_makefile = self.work_dir / "common/init/Makefile"
